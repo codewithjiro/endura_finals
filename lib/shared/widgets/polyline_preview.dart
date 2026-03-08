@@ -1,4 +1,4 @@
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
 /// Renders a route polyline on a dark background without map tiles.
@@ -8,19 +8,23 @@ class PolylineOnlyPreview extends StatelessWidget {
   final Color backgroundColor;
   final Color lineColor;
   final double lineWidth;
+  final bool showGlow;
+  final bool showEndpoints;
 
   const PolylineOnlyPreview({
     super.key,
     required this.routePoints,
-    this.backgroundColor = const Color(0xFF1A1A2E),
+    this.backgroundColor = Colors.transparent,
     this.lineColor = const Color(0xFFFC4C02),
     this.lineWidth = 3,
+    this.showGlow = true,
+    this.showEndpoints = true,
   });
 
   @override
   Widget build(BuildContext context) {
     if (routePoints.length < 2) {
-      return Container(color: backgroundColor);
+      return const SizedBox.shrink();
     }
     return Container(
       color: backgroundColor,
@@ -32,6 +36,8 @@ class PolylineOnlyPreview extends StatelessWidget {
               routePoints: routePoints,
               lineColor: lineColor,
               lineWidth: lineWidth,
+              showGlow: showGlow,
+              showEndpoints: showEndpoints,
             ),
           );
         },
@@ -44,11 +50,15 @@ class _RouteLinePainter extends CustomPainter {
   final List<LatLng> routePoints;
   final Color lineColor;
   final double lineWidth;
+  final bool showGlow;
+  final bool showEndpoints;
 
   _RouteLinePainter({
     required this.routePoints,
     required this.lineColor,
     required this.lineWidth,
+    required this.showGlow,
+    required this.showEndpoints,
   });
 
   @override
@@ -94,17 +104,19 @@ class _RouteLinePainter extends CustomPainter {
       path.lineTo(pt.dx, pt.dy);
     }
 
-    // Glow
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = lineColor.withValues(alpha: 0.3)
-        ..strokeWidth = lineWidth + 4
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
+    if (showGlow) {
+      // Glow
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = lineColor.withValues(alpha: 0.3)
+          ..strokeWidth = lineWidth + 4
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+      );
+    }
 
     // Main line
     canvas.drawPath(
@@ -117,35 +129,23 @@ class _RouteLinePainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round,
     );
 
-    // Start dot (green)
-    final startPt = toCanvas(routePoints.first);
-    canvas.drawCircle(startPt, 5, Paint()..color = const Color(0xFF34C759));
-    canvas.drawCircle(
-      startPt,
-      5,
-      Paint()
-        ..color = CupertinoColors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
+    if (showEndpoints) {
+      // Start dot (green)
+      final startPt = toCanvas(routePoints.first);
+      canvas.drawCircle(startPt, 5, Paint()..color = const Color(0xFF34C759));
 
-    // End dot (red)
-    final endPt = toCanvas(routePoints.last);
-    canvas.drawCircle(endPt, 5, Paint()..color = const Color(0xFFFF3B30));
-    canvas.drawCircle(
-      endPt,
-      5,
-      Paint()
-        ..color = CupertinoColors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
+      // End dot (red)
+      final endPt = toCanvas(routePoints.last);
+      canvas.drawCircle(endPt, 5, Paint()..color = const Color(0xFFFF3B30));
+    }
   }
 
   @override
   bool shouldRepaint(covariant _RouteLinePainter oldDelegate) {
     return oldDelegate.routePoints != routePoints ||
-        oldDelegate.lineColor != lineColor;
+        oldDelegate.lineColor != lineColor ||
+        oldDelegate.lineWidth != lineWidth ||
+        oldDelegate.showGlow != showGlow ||
+        oldDelegate.showEndpoints != showEndpoints;
   }
 }
-
