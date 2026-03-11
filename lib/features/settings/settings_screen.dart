@@ -1,3 +1,4 @@
+
 import 'package:flutter/cupertino.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:endura/core/theme/app_theme.dart';
@@ -6,55 +7,46 @@ import 'package:endura/core/storage/hive_service.dart';
 import 'package:endura/core/utils/biometric_service.dart';
 import 'package:endura/signin.dart';
 import 'package:endura/signup.dart';
-import 'package:endura/main.dart' show themeNotifier;
 
-/// Settings screen — biometrics toggle, logout, and reset data.
-class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+class ProfileSettingsSection extends StatefulWidget {
+  const ProfileSettingsSection({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  State<ProfileSettingsSection> createState() => _ProfileSettingsSectionState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _ProfileSettingsSectionState extends State<ProfileSettingsSection> {
   bool _biometricsEnabled = false;
   bool _biometricsAvailable = false;
-  String _themeMode = 'system';
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
+    _load();
   }
 
-  Future<void> _loadSettings() async {
+  Future<void> _load() async {
     final available = await BiometricService.canAuthenticate();
     final enabled = BiometricService.isEnabled();
-    final theme = themeNotifier.mode;
-    if (mounted) {
-      setState(() {
-        _biometricsAvailable = available;
-        _biometricsEnabled = enabled;
-        _themeMode = theme;
-        _loading = false;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _biometricsAvailable = available;
+      _biometricsEnabled = enabled;
+      _loading = false;
+    });
   }
 
   Future<void> _toggleBiometrics(bool value) async {
     if (value) {
-      // Verify biometric first before enabling
       final authenticated = await BiometricService.authenticate(
         reason: 'Authenticate to enable biometric login',
       );
       if (!authenticated) return;
     }
-
     await BiometricService.setEnabled(value);
-    if (mounted) {
-      setState(() => _biometricsEnabled = value);
-    }
+    if (!mounted) return;
+    setState(() => _biometricsEnabled = value);
   }
 
   void _handleLogout() {
@@ -62,9 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
         title: const Text('Log Out?'),
-        content: const Text(
-          'You will need to sign in again. Your data will be kept.',
-        ),
+        content: const Text('You will need to sign in again. Your data will be kept.'),
         actions: [
           CupertinoDialogAction(
             child: const Text('Cancel'),
@@ -75,7 +65,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Log Out'),
             onPressed: () async {
               Navigator.of(ctx).pop();
-
               final box = Hive.box(HiveBoxes.database);
               await box.put('loggedIn', false);
 
@@ -83,7 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
                 CupertinoPageRoute(builder: (_) => const SigninPage()),
-                (route) => false,
+                    (route) => false,
               );
             },
           ),
@@ -93,7 +82,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _handleResetData() async {
-    // If biometrics enabled, require authentication first
     if (_biometricsEnabled) {
       final authenticated = await BiometricService.authenticate(
         reason: 'Authenticate to reset all data',
@@ -128,7 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Reset All Data?'),
         content: const Text(
           'This will permanently delete your account, all activities, '
-          'challenges, feed data, and preferences. This cannot be undone.',
+              'challenges, feed data, and preferences. This cannot be undone.',
         ),
         actions: [
           CupertinoDialogAction(
@@ -140,11 +128,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Reset Everything'),
             onPressed: () async {
               Navigator.of(ctx).pop();
-
-              // Clear all feature boxes
               await HiveService.clearAll();
 
-              // Clear auth credentials and login state
               final box = Hive.box(HiveBoxes.database);
               await box.clear();
 
@@ -152,7 +137,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
                 CupertinoPageRoute(builder: (_) => const SignupPage()),
-                (route) => false,
+                    (route) => false,
               );
             },
           ),
@@ -163,227 +148,114 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      navigationBar: const CupertinoNavigationBar(
-        middle: Text('Settings'),
-        previousPageTitle: 'Profile',
-      ),
-      child: SafeArea(
-        child: _loading
-            ? const Center(child: CupertinoActivityIndicator(radius: 14))
-            : SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.all(AppTheme.spacingMd),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
+    if (_loading) {
+      return const Center(child: CupertinoActivityIndicator(radius: 14));
+    }
 
-                    // ── Appearance Section ──────────────────────────
-                    _SectionHeader('Appearance'),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.cardColor(context),
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radius),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 10),
+        const _SectionHeader('Security'),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor(context),
+            borderRadius: BorderRadius.circular(AppTheme.radius),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  CupertinoIcons.lock_shield_fill,
+                  size: 20,
+                  color: AppTheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Biometric Login',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textColor(context),
+                        ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                _themeMode == 'dark'
-                                    ? CupertinoIcons.moon_fill
-                                    : CupertinoIcons.sun_max_fill,
-                                size: 20,
-                                color: AppTheme.primary,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Theme',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppTheme.textColor(context),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child:
-                                CupertinoSlidingSegmentedControl<String>(
-                              groupValue: _themeMode,
-                              children: const {
-                                'system': Padding(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 6),
-                                  child: Text('System',
-                                      style: TextStyle(fontSize: 13)),
-                                ),
-                                'light': Padding(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 6),
-                                  child: Text('Light',
-                                      style: TextStyle(fontSize: 13)),
-                                ),
-                                'dark': Padding(
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 6),
-                                  child: Text('Dark',
-                                      style: TextStyle(fontSize: 13)),
-                                ),
-                              },
-                              onValueChanged: (value) async {
-                                if (value == null) return;
-                                setState(() => _themeMode = value);
-                                await themeNotifier.setMode(value);
-                              },
-                            ),
-                          ),
-                        ],
+                      Text(
+                        _biometricsAvailable
+                            ? 'Use fingerprint or Face ID to sign in'
+                            : 'Not available on this device',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // ── Security Section ────────────────────────────
-                    _SectionHeader('Security'),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.cardColor(context),
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radius),
-                      ),
-                      child: Column(
-                        children: [
-                          // Biometric toggle
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 6),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  CupertinoIcons.lock_shield_fill,
-                                  size: 20,
-                                  color: AppTheme.primary,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Biometric Login',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w500,
-                                          color:
-                                              AppTheme.textColor(context),
-                                        ),
-                                      ),
-                                      Text(
-                                        _biometricsAvailable
-                                            ? 'Use fingerprint or Face ID to sign in'
-                                            : 'Not available on this device',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                CupertinoSwitch(
-                                  value: _biometricsEnabled,
-                                  activeTrackColor: AppTheme.primary,
-                                  onChanged: _biometricsAvailable
-                                      ? _toggleBiometrics
-                                      : null,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // ── Account Section ─────────────────────────────
-                    _SectionHeader('Account'),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.cardColor(context),
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radius),
-                      ),
-                      child: Column(
-                        children: [
-                          // Logout
-                          _SettingsAction(
-                            icon: CupertinoIcons.square_arrow_right,
-                            iconColor: AppTheme.primary,
-                            label: 'Log Out',
-                            onTap: _handleLogout,
-                          ),
-                          Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 16),
-                            child: Container(
-                              height: 0.5,
-                              color: CupertinoColors.separator,
-                            ),
-                          ),
-                          // Reset data
-                          _SettingsAction(
-                            icon: CupertinoIcons.trash,
-                            iconColor: AppTheme.danger,
-                            label: 'Reset All Data',
-                            labelColor: AppTheme.danger,
-                            onTap: _handleResetData,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // ── Info footer ─────────────────────────────────
-                    Center(
-                      child: Column(
-                        children: [
-                          Text(
-                            'Endura v1.0.0',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Local-first fitness tracking',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.textSecondary
-                                  .withValues(alpha: 0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-                  ],
+                    ],
+                  ),
+                ),
+                CupertinoSwitch(
+                  value: _biometricsEnabled,
+                  activeTrackColor: AppTheme.primary,
+                  onChanged: _biometricsAvailable ? _toggleBiometrics : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
+        const _SectionHeader('Account'),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor(context),
+            borderRadius: BorderRadius.circular(AppTheme.radius),
+          ),
+          child: Column(
+            children: [
+              _SettingsAction(
+                icon: CupertinoIcons.square_arrow_right,
+                iconColor: AppTheme.primary,
+                label: 'Log Out',
+                onTap: _handleLogout,
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(height: 0.5, color: CupertinoColors.separator),
+              ),
+              _SettingsAction(
+                icon: CupertinoIcons.trash,
+                iconColor: AppTheme.danger,
+                label: 'Reset All Data',
+                labelColor: AppTheme.danger,
+                onTap: _handleResetData,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        Center(
+          child: Column(
+            children: [
+              Text(
+                'Endura v1.0.0',
+                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Local-first fitness tracking',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary.withValues(alpha: 0.6),
                 ),
               ),
-      ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -445,17 +317,14 @@ class _SettingsAction extends StatelessWidget {
                 ),
               ),
             ),
-            const Icon(CupertinoIcons.chevron_right,
-                size: 16, color: CupertinoColors.systemGrey3),
+            const Icon(
+              CupertinoIcons.chevron_right,
+              size: 16,
+              color: CupertinoColors.systemGrey3,
+            ),
           ],
         ),
       ),
     );
   }
 }
-
-
-
-
-
-

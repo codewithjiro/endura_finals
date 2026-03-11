@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -55,7 +56,7 @@ class _SigninPageState extends State<SigninPage> {
 
     Navigator.of(context).pushAndRemoveUntil(
       CupertinoPageRoute(builder: (_) => const HomeShell()),
-      (route) => false,
+          (route) => false,
     );
   }
 
@@ -107,7 +108,7 @@ class _SigninPageState extends State<SigninPage> {
 
     Navigator.of(context).pushAndRemoveUntil(
       CupertinoPageRoute(builder: (_) => const HomeShell()),
-      (route) => false,
+          (route) => false,
     );
   }
 
@@ -147,7 +148,7 @@ class _SigninPageState extends State<SigninPage> {
         title: const Text('Reset All Data?'),
         content: const Text(
           'This will permanently delete your account, all activities, '
-          'challenges, feed data, and preferences. This cannot be undone.',
+              'challenges, feed data, and preferences. This cannot be undone.',
         ),
         actions: [
           CupertinoDialogAction(
@@ -171,7 +172,7 @@ class _SigninPageState extends State<SigninPage> {
               // Navigate to signup as a fresh user
               Navigator.of(context).pushAndRemoveUntil(
                 CupertinoPageRoute(builder: (_) => const SignupPage()),
-                (route) => false,
+                    (route) => false,
               );
             },
           ),
@@ -187,202 +188,395 @@ class _SigninPageState extends State<SigninPage> {
     return CupertinoPageScaffold(
       child: Stack(
         children: [
-          // ── Light Purple hero top with SVG ──────────────────────────────────────
+          // ── Background (match Signup: dark gradient + glow) ─────────────
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFF0B0614),
+                    Color(0xFF2B0A4F),
+                    Color(0xFF6F2DA8),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    top: -90,
+                    right: -60,
+                    child: _GlowBlob(
+                      color: const Color(0xFFB26CFF).withValues(alpha: 0.45),
+                      size: 220,
+                      blur: 28,
+                    ),
+                  ),
+                  Positioned(
+                    top: 90,
+                    left: -80,
+                    child: _GlowBlob(
+                      color: const Color(0xFFFF5ACD).withValues(alpha: 0.18),
+                      size: 240,
+                      blur: 30,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 140,
+                    right: -90,
+                    child: _GlowBlob(
+                      color: const Color(0xFF4D7CFE).withValues(alpha: 0.14),
+                      size: 260,
+                      blur: 34,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Hero top (glass logo + text) ────────────────────────────────
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            height: size.height * 0.44,
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Color(0xFFF3E8FF),
-              ),
-              child: SafeArea(
-                bottom: false,
+            height: size.height * 0.40,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // SVG Logo Container
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF6F2DA8).withValues(alpha: 0.12),
-                      ),
-                      padding: const EdgeInsets.all(24),
-                      child: SvgPicture.asset(
-                        'assets/svg/sigin.svg',
-                        fit: BoxFit.contain,
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(28),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                        child: Container(
+                          width: 132,
+                          height: 132,
+                          decoration: BoxDecoration(
+                            color: CupertinoColors.white.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(28),
+                            border: Border.all(
+                              color:
+                              CupertinoColors.white.withValues(alpha: 0.18),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF6F2DA8)
+                                    .withValues(alpha: 0.35),
+                                blurRadius: 26,
+                                offset: const Offset(0, 12),
+                              ),
+                            ],
+                          ),
+                          padding: const EdgeInsets.all(26),
+                          child: SvgPicture.asset(
+                            'assets/svg/sigin.svg',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 18),
                     const Text(
                       'Endura',
                       style: TextStyle(
-                        color: Color(0xFF4A1A6B),
-                        fontSize: 30,
+                        color: CupertinoColors.white,
+                        fontSize: 32,
                         fontWeight: FontWeight.w900,
-                        letterSpacing: -0.8,
+                        letterSpacing: -0.9,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
                       'Welcome back to your journey',
                       style: TextStyle(
-                        color: const Color(0xFF4A1A6B).withValues(alpha: 0.6),
+                        color: CupertinoColors.white.withValues(alpha: 0.78),
                         fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
                       ),
+                      textAlign: TextAlign.center,
                     ),
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),
             ),
           ),
 
-          // ── Grape Purple bottom card ────────────────────────────────────
+          // ── Bottom sheet card (glass, like Signup) ──────────────────────
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
-            top: size.height * 0.36,
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF6F2DA8), Color(0xFF8E44AD)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-              ),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'Welcome Back',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: CupertinoColors.white,
-                        letterSpacing: -0.5,
-                      ),
-                      textAlign: TextAlign.center,
+            top: size.height * 0.40,
+            child: ClipRRect(
+              borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(34)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFFF7F0FF).withValues(alpha: 0.92),
+                        const Color(0xFFEFE2FF).withValues(alpha: 0.88),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Sign in to continue your Endura journey.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: CupertinoColors.white.withValues(alpha: 0.8),
-                      ),
-                      textAlign: TextAlign.center,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(34),
                     ),
-                    const SizedBox(height: 28),
-
-                    // Username field
-                    _AuthField(
-                      controller: _username,
-                      placeholder: 'Username',
-                      icon: CupertinoIcons.person_fill,
+                    border: Border.all(
+                      color: CupertinoColors.white.withValues(alpha: 0.65),
+                      width: 1,
                     ),
-                    const SizedBox(height: 14),
-
-                    // Password field
-                    _AuthField(
-                      controller: _password,
-                      placeholder: 'Password',
-                      icon: CupertinoIcons.lock_fill,
-                      obscureText: hidePassword,
-                      suffix: GestureDetector(
-                        onTap: () =>
-                            setState(() => hidePassword = !hidePassword),
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 16),
-                          child: Icon(
-                            hidePassword
-                                ? CupertinoIcons.eye_fill
-                                : CupertinoIcons.eye_slash_fill,
-                            color: CupertinoColors.systemGrey,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-
-                    // Sign In button
-                    SizedBox(
-                      width: double.infinity,
-                      child: CupertinoButton(
-                        color: CupertinoColors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        onPressed: _handleSignin,
-                        child: const Text(
-                          'Sign In',
-                          style: TextStyle(
-                            color: Color(0xFF6F2DA8),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Biometric login button
-                    if (_biometricsAvailable) ...[
-                      const SizedBox(height: 16),
-                      GestureDetector(
-                        onTap: _handleBiometricLogin,
-                        child: Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: CupertinoColors.white.withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: CupertinoColors.white.withValues(alpha: 0.3),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: const Icon(
-                            CupertinoIcons.lock_shield_fill,
-                            color: CupertinoColors.white,
-                            size: 26,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Sign in with biometrics',
-                        style: TextStyle(
-                          color: CupertinoColors.white.withValues(alpha: 0.7),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: CupertinoColors.black.withValues(alpha: 0.18),
+                        blurRadius: 30,
+                        offset: const Offset(0, -8),
                       ),
                     ],
-
-                    const SizedBox(height: 14),
-
-                    // Reset Data button
-                    CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: _handleResetData,
-                      child: Text(
-                        'Reset All Data',
-                        style: TextStyle(
-                          color: CupertinoColors.white.withValues(alpha: 0.6),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                  ),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 54,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4A1A6B)
+                                .withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(99),
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 18),
+                        const Text(
+                          'Welcome Back',
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF3C135D),
+                            letterSpacing: -0.6,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Sign in to continue your Endura journey.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: const Color(0xFF4A1A6B)
+                                .withValues(alpha: 0.62),
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 26),
+
+                        _AuthField(
+                          controller: _username,
+                          placeholder: 'Username',
+                          icon: CupertinoIcons.person_fill,
+                        ),
+                        const SizedBox(height: 14),
+
+                        _AuthField(
+                          controller: _password,
+                          placeholder: 'Password',
+                          icon: CupertinoIcons.lock_fill,
+                          obscureText: hidePassword,
+                          suffix: GestureDetector(
+                            onTap: () =>
+                                setState(() => hidePassword = !hidePassword),
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 16),
+                              child: Icon(
+                                hidePassword
+                                    ? CupertinoIcons.eye_fill
+                                    : CupertinoIcons.eye_slash_fill,
+                                color: CupertinoColors.systemGrey,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        SizedBox(
+                          width: double.infinity,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF6F2DA8), Color(0xFFB26CFF)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF6F2DA8)
+                                      .withValues(alpha: 0.35),
+                                  blurRadius: 22,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: CupertinoButton(
+                              color: CupertinoColors.transparent,
+                              borderRadius: BorderRadius.circular(16),
+                              pressedOpacity: 0.72,
+                              onPressed: _handleSignin,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: const Text(
+                                'Sign In',
+                                style: TextStyle(
+                                  color: CupertinoColors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16,
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        if (_biometricsAvailable) ...[
+                          const SizedBox(height: 16),
+                          GestureDetector(
+                            onTap: _handleBiometricLogin,
+                            child: ClipOval(
+                              child: BackdropFilter(
+                                filter:
+                                ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                                child: Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF6F2DA8)
+                                        .withValues(alpha: 0.16),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: const Color(0xFF6F2DA8)
+                                          .withValues(alpha: 0.22),
+                                      width: 1.5,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF6F2DA8)
+                                            .withValues(alpha: 0.22),
+                                        blurRadius: 18,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    CupertinoIcons.lock_shield_fill,
+                                    color: Color(0xFF3C135D),
+                                    size: 26,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Sign in with biometrics',
+                            style: TextStyle(
+                              color: const Color(0xFF4A1A6B)
+                                  .withValues(alpha: 0.55),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+
+                        const SizedBox(height: 12),
+
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 10,
+                          ),
+                          pressedOpacity: 0.55,
+                          onPressed: _handleResetData,
+                          child: Text(
+                            'Reset All Data',
+                            style: TextStyle(
+                              color: const Color(0xFF4A1A6B)
+                                  .withValues(alpha: 0.55),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 6,
+                            horizontal: 10,
+                          ),
+                          pressedOpacity: 0.55,
+                          onPressed: () {
+                            Navigator.pushReplacement(
+                              context,
+                              CupertinoPageRoute(
+                                builder: (_) => const SignupPage(),
+                              ),
+                            );
+                          },
+                          child: Text(
+                            "Don't have an account? Sign up",
+                            style: TextStyle(
+                              color: const Color(0xFF6F2DA8)
+                                  .withValues(alpha: 0.95),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 20),
-                  ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // ── Back button ─────────────────────────────────────────────────
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 6, top: 6),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: CupertinoButton(
+                    padding: const EdgeInsets.all(10),
+                    minSize: 0,
+                    pressedOpacity: 0.65,
+                    onPressed: () => Navigator.maybePop(context),
+                    child: Icon(
+                      CupertinoIcons.back,
+                      color: CupertinoColors.white.withValues(alpha: 0.92),
+                      size: 22,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -393,8 +587,36 @@ class _SigninPageState extends State<SigninPage> {
   }
 }
 
-// ── Modern Auth Field Component ─────────────────────────────────────────────
-class _AuthField extends StatelessWidget {
+// ── Glow blob for background ────────────────────────────────────────────────
+class _GlowBlob extends StatelessWidget {
+  final Color color;
+  final double size;
+  final double blur;
+
+  const _GlowBlob({
+    required this.color,
+    required this.size,
+    required this.blur,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ImageFiltered(
+      imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Modern Auth Field Component (focus glow) ────────────────────────────────
+class _AuthField extends StatefulWidget {
   final TextEditingController controller;
   final String placeholder;
   final IconData icon;
@@ -410,31 +632,87 @@ class _AuthField extends StatelessWidget {
   });
 
   @override
+  State<_AuthField> createState() => _AuthFieldState();
+}
+
+class _AuthFieldState extends State<_AuthField> {
+  final FocusNode _focusNode = FocusNode();
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(() {
+      if (!mounted) return;
+      setState(() => _focused = _focusNode.hasFocus);
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
+    final borderColor = _focused
+        ? const Color(0xFF6F2DA8).withValues(alpha: 0.55)
+        : const Color(0xFF6F2DA8).withValues(alpha: 0.12);
+
+    final glowColor = _focused
+        ? const Color(0xFFB26CFF).withValues(alpha: 0.28)
+        : const Color(0xFF6F2DA8).withValues(alpha: 0.10);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: CupertinoColors.white,
+        gradient: LinearGradient(
+          colors: [
+            CupertinoColors.white.withValues(alpha: 0.94),
+            const Color(0xFFF6EEFF).withValues(alpha: 0.86),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: borderColor,
+          width: _focused ? 1.2 : 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: CupertinoColors.systemGrey.withValues(alpha: 0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: glowColor,
+            blurRadius: _focused ? 22 : 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: CupertinoTextField(
-        controller: controller,
-        placeholder: placeholder,
-        placeholderStyle: const TextStyle(color: CupertinoColors.systemGrey2),
-        style: const TextStyle(color: CupertinoColors.black),
-        obscureText: obscureText,
+        focusNode: _focusNode,
+        controller: widget.controller,
+        placeholder: widget.placeholder,
+        placeholderStyle: TextStyle(
+          color: const Color(0xFF4A1A6B).withValues(alpha: 0.40),
+          fontWeight: FontWeight.w600,
+        ),
+        style: const TextStyle(
+          color: CupertinoColors.black,
+          fontWeight: FontWeight.w700,
+        ),
+        obscureText: widget.obscureText,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         prefix: Padding(
           padding: const EdgeInsets.only(left: 16),
-          child: Icon(icon, color: CupertinoColors.systemGrey),
+          child: Icon(
+            widget.icon,
+            color: _focused
+                ? const Color(0xFF6F2DA8).withValues(alpha: 0.95)
+                : const Color(0xFF6F2DA8).withValues(alpha: 0.70),
+          ),
         ),
-        suffix: suffix,
+        suffix: widget.suffix,
         decoration: BoxDecoration(
           color: CupertinoColors.transparent,
           borderRadius: BorderRadius.circular(16),
