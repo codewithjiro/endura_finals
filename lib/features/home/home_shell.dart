@@ -6,7 +6,7 @@ import 'package:endura/core/theme/app_theme.dart';
 import 'package:endura/features/profile/user_repository.dart';
 import 'package:endura/features/home/feed_screen.dart';
 import 'package:endura/features/tracking/tracking_screen.dart';
-import 'package:endura/features/explore/explore_screen.dart';
+import 'package:endura/features/explore/presentation/explore_screen.dart';
 import 'package:endura/features/challenges/challenge_list_screen.dart';
 import 'package:endura/features/profile/profile_screen.dart';
 
@@ -67,7 +67,7 @@ class _HomeShellState extends State<HomeShell> {
         child: Image.file(
           File(_avatarLocalPath!),
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Icon(
+          errorBuilder: (_, _, _) => Icon(
             CupertinoIcons.person_crop_circle_fill,
             size: 26,
             color: color,

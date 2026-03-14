@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:endura/core/theme/app_theme.dart';
 import 'package:endura/core/utils/formatters.dart';
@@ -6,24 +7,21 @@ import 'package:endura/shared/models/cached_feed_item.dart';
 import 'package:endura/shared/models/cached_activity.dart';
 import 'package:endura/shared/widgets/endura_avatar.dart';
 import 'package:endura/shared/widgets/polyline_preview.dart';
-import 'package:endura/features/feed/feed_repository.dart';
 import 'package:endura/features/activity/activity_detail_screen.dart';
-import 'package:endura/features/activity/activity_repository.dart';
+import 'package:endura/features/activity/application/activity_providers.dart';
+import 'package:endura/features/feed/application/feed_providers.dart';
 
 /// Home tab — your activity feed.
-class FeedScreen extends StatelessWidget {
+class FeedScreen extends ConsumerWidget {
   const FeedScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return CupertinoPageScaffold(
-      child: ValueListenableBuilder(
-        valueListenable: FeedRepository.listenable,
-        builder: (context, box, _) {
-          final items = FeedRepository.getAll();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final items = ref.watch(feedItemsProvider);
 
-          if (items.isEmpty) {
-            return CustomScrollView(
+    return CupertinoPageScaffold(
+      child: items.isEmpty
+          ? CustomScrollView(
               physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics(),
               ),
@@ -59,48 +57,44 @@ class FeedScreen extends StatelessWidget {
                   ),
                 ),
               ],
-            );
-          }
-
-          return CustomScrollView(
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
-            slivers: [
-              const CupertinoSliverNavigationBar(
-                largeTitle: Text('Activities'),
-                border: null,
+            )
+          : CustomScrollView(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppTheme.spacingMd,
-                  AppTheme.spacingMd,
-                  AppTheme.spacingMd,
-                  100,
+              slivers: [
+                const CupertinoSliverNavigationBar(
+                  largeTitle: Text('Activities'),
+                  border: null,
                 ),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => Padding(
-                      padding:
-                          const EdgeInsets.only(bottom: AppTheme.spacingMd),
-                      child: _FeedCard(
-                        item: items[index],
-                        onTap: () => _openDetail(context, items[index]),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                    AppTheme.spacingMd,
+                    100,
+                  ),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => Padding(
+                        padding:
+                            const EdgeInsets.only(bottom: AppTheme.spacingMd),
+                        child: _FeedCard(
+                          item: items[index],
+                          onTap: () => _openDetail(context, ref, items[index]),
+                        ),
                       ),
+                      childCount: items.length,
                     ),
-                    childCount: items.length,
                   ),
                 ),
-              ),
-            ],
-          );
-        },
-      ),
+              ],
+            ),
     );
   }
 
-  void _openDetail(BuildContext context, CachedFeedItem item) {
-    final activity = ActivityRepository.getById(item.activityId);
+  void _openDetail(BuildContext context, WidgetRef ref, CachedFeedItem item) {
+    final activity = ref.read(activityByIdProvider(item.activityId));
     if (activity == null) return;
     Navigator.of(context).push(
       CupertinoPageRoute(
@@ -268,11 +262,5 @@ class _MiniStat extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
 
 

@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart' hide ActivityType;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:uuid/uuid.dart';
 import 'package:endura/core/theme/app_theme.dart';
 import 'package:endura/core/maps/endura_map.dart';
+import 'package:endura/core/maps/map_tile_source.dart';
 import 'package:endura/core/maps/polyline_helper.dart';
 import 'package:endura/core/maps/marker_helper.dart';
 import 'package:endura/core/utils/location_service.dart';
@@ -13,18 +15,19 @@ import 'package:endura/core/utils/formatters.dart';
 import 'package:endura/shared/models/cached_activity.dart';
 import 'package:endura/features/activity/summary_screen.dart';
 import 'package:endura/features/profile/user_repository.dart';
+import 'package:endura/features/tracking/providers/map_source_provider.dart';
 
 /// Track tab — live workout recording with map.
-class TrackingScreen extends StatefulWidget {
+class TrackingScreen extends ConsumerStatefulWidget {
   const TrackingScreen({super.key});
 
   @override
-  State<TrackingScreen> createState() => _TrackingScreenState();
+  ConsumerState<TrackingScreen> createState() => _TrackingScreenState();
 }
 
 enum _WorkoutState { idle, tracking, paused }
 
-class _TrackingScreenState extends State<TrackingScreen> {
+class _TrackingScreenState extends ConsumerState<TrackingScreen> {
   _WorkoutState _state = _WorkoutState.idle;
   ActivityType _selectedType = ActivityType.walking;
   bool _permissionGranted = false;
@@ -50,6 +53,46 @@ class _TrackingScreenState extends State<TrackingScreen> {
   void initState() {
     super.initState();
     _checkPermission();
+  }
+
+  void _showMapOptions(MapTileSource selectedMapSource) {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: const Text('Map style'),
+        message: Text('Current: ${selectedMapSource.label}'),
+        actions: [
+          for (final source in MapTileSources.all)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                ref
+                    .read(trackingMapSourceProvider.notifier)
+                    .setSource(source);
+              },
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (source.id == selectedMapSource.id) ...[
+                    const Icon(
+                      CupertinoIcons.check_mark_circled_solid,
+                      size: 18,
+                      color: AppTheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(source.label),
+                ],
+              ),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Cancel'),
+        ),
+      ),
+    );
   }
 
   Future<void> _checkPermission() async {
@@ -292,6 +335,11 @@ class _TrackingScreenState extends State<TrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final selectedMapSource = ref.watch(trackingMapSourceProvider).maybeWhen(
+          data: (source) => source,
+          orElse: () => MapTileSources.byId(null),
+        );
+
     if (_checkingPermission) {
       return const CupertinoPageScaffold(
         navigationBar: CupertinoNavigationBar(middle: Text('Track')),
@@ -338,6 +386,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
               zoom: 16,
               mapController: _mapController,
               interactive: true,
+              tileSource: selectedMapSource,
               polylines: _routePoints.length >= 2
                   ? [PolylineHelper.route(_routePoints, color: AppTheme.primary, width: 5)]
                   : [],
@@ -347,6 +396,44 @@ class _TrackingScreenState extends State<TrackingScreen> {
                 if (_currentLocation != null)
                   MarkerHelper.currentLocation(_currentLocation!),
               ],
+            ),
+          ),
+
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 14,
+            child: GestureDetector(
+              onTap: () => _showMapOptions(selectedMapSource),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.cardColor(context),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0x33000000),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(CupertinoIcons.map_pin_ellipse,
+                        size: 16, color: AppTheme.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      selectedMapSource.label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textColor(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
 
@@ -432,7 +519,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: ActivityType.values.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, i) {
               final type = ActivityType.values[i];
               final selected = _selectedType == type;
@@ -692,5 +779,4 @@ class _BigStat extends StatelessWidget {
     );
   }
 }
-
 

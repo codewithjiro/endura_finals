@@ -1,29 +1,31 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:endura/core/theme/app_theme.dart';
 import 'package:endura/core/utils/formatters.dart';
 import 'package:endura/shared/models/cached_activity.dart';
-import 'package:endura/features/activity/activity_repository.dart';
 import 'package:endura/features/activity/activity_detail_screen.dart';
+import 'package:endura/features/activity/application/activity_providers.dart';
 
-/// Activity history list — real-time updates via Hive listenable.
-class ActivityListScreen extends StatefulWidget {
+/// Activity history list — real-time updates via Riverpod providers.
+class ActivityListScreen extends ConsumerStatefulWidget {
   const ActivityListScreen({super.key});
 
   @override
-  State<ActivityListScreen> createState() => _ActivityListScreenState();
+  ConsumerState<ActivityListScreen> createState() => _ActivityListScreenState();
 }
 
-class _ActivityListScreenState extends State<ActivityListScreen> {
+class _ActivityListScreenState extends ConsumerState<ActivityListScreen> {
   ActivityType? _filterType;
 
-  List<CachedActivity> _getFiltered() {
-    final all = ActivityRepository.getAll();
+  List<CachedActivity> _getFiltered(List<CachedActivity> all) {
     if (_filterType == null) return all;
     return all.where((a) => a.type == _filterType).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    final activities = _getFiltered(ref.watch(activityListProvider));
+
     return CupertinoPageScaffold(
       navigationBar: const CupertinoNavigationBar(
         middle: Text('Activity History'),
@@ -62,13 +64,8 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
             ),
             // Real-time list
             Expanded(
-              child: ValueListenableBuilder(
-                valueListenable: ActivityRepository.listenable,
-                builder: (context, box, _) {
-                  final activities = _getFiltered();
-
-                  if (activities.isEmpty) {
-                    return Center(
+              child: activities.isEmpty
+                  ? Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -82,32 +79,28 @@ class _ActivityListScreenState extends State<ActivityListScreen> {
                                   color: AppTheme.textColor(context))),
                         ],
                       ),
-                    );
-                  }
-
-                  return ListView.separated(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
-                    itemCount: activities.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final activity = activities[index];
-                      return _ActivityCard(
-                        activity: activity,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            CupertinoPageRoute(
-                              builder: (_) =>
-                                  ActivityDetailScreen(activity: activity),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
-              ),
+                    )
+                  : ListView.separated(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      itemCount: activities.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final activity = activities[index];
+                        return _ActivityCard(
+                          activity: activity,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              CupertinoPageRoute(
+                                builder: (_) =>
+                                    ActivityDetailScreen(activity: activity),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
             ),
           ],
         ),
@@ -229,8 +222,3 @@ class _ActivityCard extends StatelessWidget {
     );
   }
 }
-
-
-
-
-

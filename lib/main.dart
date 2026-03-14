@@ -1,21 +1,19 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:lottie/lottie.dart';
 
 import 'constants.dart';
+import 'core/providers/theme_provider.dart';
 import 'core/storage/hive_service.dart';
 import 'core/storage/hive_boxes.dart';
 import 'core/theme/app_theme.dart';
-import 'core/theme/theme_notifier.dart';
 import 'features/home/home_shell.dart';
 import 'features/profile/user_repository.dart';
 import 'signin.dart';
 import 'signup.dart';
-
-/// Global theme notifier instance.
-final themeNotifier = ThemeNotifier();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,7 +24,7 @@ void main() async {
     statusBarIconBrightness: Brightness.dark,
   ));
 
-  runApp(const AuthGate());
+  runApp(const ProviderScope(child: AuthGate()));
 }
 
 class AuthGate extends StatefulWidget {
@@ -69,27 +67,49 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: themeNotifier,
-      builder: (context, _) {
-        final brightness = themeNotifier.brightness;
-        final theme = brightness == Brightness.dark
-            ? AppTheme.darkTheme
-            : brightness == Brightness.light
-                ? AppTheme.lightTheme
-                : AppTheme.lightTheme; // system default fallback
+    return AppRoot(
+      isLoading: _isLoading,
+      hasUser: _hasUser,
+      isLoggedIn: _isLoggedIn,
+    );
+  }
+}
 
-        return CupertinoApp(
-          title: "Endura",
-          debugShowCheckedModeBanner: false,
-          theme: theme,
-          home: _isLoading
-              ? const SplashScreen()
-              : (_isLoggedIn
-                  ? const HomeShell()
-                  : (_hasUser ? const SigninPage() : const SignupPage())),
-        );
-      },
+class AppRoot extends ConsumerWidget {
+  final bool isLoading;
+  final bool hasUser;
+  final bool isLoggedIn;
+
+  const AppRoot({
+    super.key,
+    required this.isLoading,
+    required this.hasUser,
+    required this.isLoggedIn,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeProvider);
+    final brightness = switch (mode) {
+      'dark' => Brightness.dark,
+      'light' => Brightness.light,
+      _ => null,
+    };
+    final theme = brightness == Brightness.dark
+        ? AppTheme.darkTheme
+        : brightness == Brightness.light
+            ? AppTheme.lightTheme
+            : AppTheme.lightTheme;
+
+    return CupertinoApp(
+      title: "Endura",
+      debugShowCheckedModeBanner: false,
+      theme: theme,
+      home: isLoading
+          ? const SplashScreen()
+          : (isLoggedIn
+              ? const HomeShell()
+              : (hasUser ? const SigninPage() : const SignupPage())),
     );
   }
 }
@@ -236,3 +256,4 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 }
+

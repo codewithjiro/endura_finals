@@ -1,36 +1,32 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:endura/core/providers/theme_provider.dart';
+import 'package:endura/core/storage/hive_boxes.dart';
 import 'package:endura/core/theme/app_theme.dart';
+import 'package:endura/core/utils/biometric_service.dart';
 import 'package:endura/core/utils/formatters.dart';
+import 'package:endura/features/activity/application/activity_providers.dart';
+import 'package:endura/features/profile/edit_profile_screen.dart';
+import 'package:endura/features/profile/user_repository.dart';
 import 'package:endura/shared/models/cached_user.dart';
 import 'package:endura/shared/widgets/endura_avatar.dart';
-import 'package:endura/features/activity/activity_repository.dart';
-import 'package:endura/features/profile/user_repository.dart';
-import 'package:endura/features/profile/edit_profile_screen.dart';
-import 'package:endura/core/storage/hive_boxes.dart';
-import 'package:endura/core/utils/biometric_service.dart';
 import 'package:endura/signin.dart';
-import 'package:endura/main.dart' show themeNotifier;
 
 /// Profile tab — user info, stats, activity history, and inline settings.
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   CachedUser? _user;
-
-  // Settings state (inline)
   bool _biometricsEnabled = false;
   bool _biometricsAvailable = false;
   bool _isFaceId = false;
-
-  // Theme mode: now only 'light' or 'dark' (system removed)
   String _themeMode = 'light';
-
   bool _loadingSettings = true;
 
   @override
@@ -50,10 +46,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final available = await BiometricService.canAuthenticate();
     final enabled = BiometricService.isEnabled();
     final faceId = await BiometricService.isFaceId();
-    final theme = themeNotifier.mode;
-
-    // if old value is 'system', default to 'light'
-    final normalizedTheme = (theme == 'dark') ? 'dark' : 'light';
+    final theme = ref.read(themeProvider);
+    final normalizedTheme = theme == 'dark' ? 'dark' : 'light';
 
     if (!mounted) return;
     setState(() {
@@ -80,7 +74,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _handleLogout() {
-    showCupertinoDialog(
+    showCupertinoDialog<void>(
       context: context,
       builder: (ctx) => CupertinoAlertDialog(
         title: const Text('Log Out?'),
@@ -97,15 +91,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: const Text('Log Out'),
             onPressed: () async {
               Navigator.of(ctx).pop();
-
               final box = Hive.box(HiveBoxes.database);
               await box.put('loggedIn', false);
-
               if (!mounted) return;
-
               Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
                 CupertinoPageRoute(builder: (_) => const SigninPage()),
-                    (route) => false,
+                (route) => false,
               );
             },
           ),
@@ -114,9 +105,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
+    final themeMode = ref.watch(themeProvider);
+    final activityStats = ref.watch(activityStatsProvider);
+    if (!_loadingSettings) {
+      final normalizedTheme = themeMode == 'dark' ? 'dark' : 'light';
+      if (_themeMode != normalizedTheme) {
+        _themeMode = normalizedTheme;
+      }
+    }
 
     return CupertinoPageScaffold(
       child: CustomScrollView(
@@ -129,7 +127,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: EdgeInsets.zero,
               onPressed: () async {
                 await Navigator.of(context).push(
-                  CupertinoPageRoute(
+                  CupertinoPageRoute<void>(
                     builder: (_) => const EditProfileScreen(),
                   ),
                 );
@@ -142,7 +140,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: const EdgeInsets.all(AppTheme.spacingMd),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // ── Avatar + bio ────────────────────────────────
                 Center(
                   child: Column(
                     children: [
@@ -176,14 +173,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(CupertinoIcons.location_solid,
-                                size: 13, color: AppTheme.textSecondary),
+                            const Icon(
+                              CupertinoIcons.location_solid,
+                              size: 13,
+                              color: AppTheme.textSecondary,
+                            ),
                             const SizedBox(width: 3),
                             Text(
                               _user!.location,
                               style: const TextStyle(
-                                  fontSize: 13,
-                                  color: AppTheme.textSecondary),
+                                fontSize: 13,
+                                color: AppTheme.textSecondary,
+                              ),
                             ),
                           ],
                         ),
@@ -192,42 +193,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-
-                // ── Stats — live via Hive listenable ─────────────
-                ValueListenableBuilder(
-                  valueListenable: ActivityRepository.listenable,
-                  builder: (context, _, __) {
-                    final totalActivities = ActivityRepository.getCount();
-                    final totalDistance = ActivityRepository.getTotalDistance();
-                    final totalDuration = ActivityRepository.getTotalDuration();
-                    return Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: BoxDecoration(
-                        color: AppTheme.cardColor(context),
-                        borderRadius: BorderRadius.circular(AppTheme.radius),
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardColor(context),
+                    borderRadius: BorderRadius.circular(AppTheme.radius),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _ProfileStat(
+                        label: 'Activities',
+                        value: '${activityStats.count}',
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _ProfileStat(
-                              label: 'Activities', value: '$totalActivities'),
-                          _ProfileStat(
-                            label: 'Distance',
-                            value: (totalDistance / 1000).toStringAsFixed(2),
-                            unit: 'km',
-                          ),
-                          _ProfileStat(
-                            label: 'Time',
-                            value: Formatters.durationTrack(totalDuration),
-                          ),
-                        ],
+                      _ProfileStat(
+                        label: 'Distance',
+                        value: (activityStats.totalDistance / 1000)
+                            .toStringAsFixed(2),
+                        unit: 'km',
                       ),
-                    );
-                  },
+                      _ProfileStat(
+                        label: 'Time',
+                        value:
+                            Formatters.durationTrack(activityStats.totalDuration),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 24),
-
-                // ── Settings label ───────────────────────────────
                 Padding(
                   padding: const EdgeInsets.only(left: 4),
                   child: Text(
@@ -241,11 +234,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-
                 if (_loadingSettings)
                   const Center(child: CupertinoActivityIndicator(radius: 14))
                 else ...[
-                  // Theme
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -280,24 +271,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           width: double.infinity,
                           child: CupertinoSlidingSegmentedControl<String>(
                             groupValue: _themeMode,
-                            children: const {
+                            children: const <String, Widget>{
                               'light': Padding(
                                 padding: EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 6),
-                                child: Text('Light',
-                                    style: TextStyle(fontSize: 13)),
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                child: Text(
+                                  'Light',
+                                  style: TextStyle(fontSize: 13),
+                                ),
                               ),
                               'dark': Padding(
                                 padding: EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 6),
-                                child: Text('Dark',
-                                    style: TextStyle(fontSize: 13)),
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                child: Text(
+                                  'Dark',
+                                  style: TextStyle(fontSize: 13),
+                                ),
                               ),
                             },
                             onValueChanged: (value) async {
                               if (value == null) return;
                               setState(() => _themeMode = value);
-                              await themeNotifier.setMode(value);
+                              await ref.read(themeProvider.notifier).setMode(value);
                             },
                           ),
                         ),
@@ -305,8 +304,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-
-                  // Biometrics
                   Container(
                     decoration: BoxDecoration(
                       color: AppTheme.cardColor(context),
@@ -314,7 +311,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       child: Row(
                         children: [
                           Icon(
@@ -330,7 +329,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _isFaceId ? 'Face ID Login' : 'Biometric Login',
+                                  _isFaceId
+                                      ? 'Face ID Login'
+                                      : 'Biometric Login',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
@@ -344,8 +345,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           : 'Use fingerprint or Face ID to sign in'
                                       : 'Not available on this device',
                                   style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.textSecondary),
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary,
+                                  ),
                                 ),
                               ],
                             ),
@@ -353,17 +355,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           CupertinoSwitch(
                             value: _biometricsEnabled,
                             activeTrackColor: AppTheme.primary,
-                            onChanged: _biometricsAvailable
-                                ? _toggleBiometrics
-                                : null,
+                            onChanged:
+                                _biometricsAvailable ? _toggleBiometrics : null,
                           ),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 10),
-
-                  // Log out
                   Container(
                     decoration: BoxDecoration(
                       color: AppTheme.cardColor(context),
@@ -377,21 +376,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 18),
-
                   Center(
                     child: Column(
                       children: [
-                        Text('Endura v1.0.0',
-                            style: TextStyle(
-                                fontSize: 13,
-                                color: AppTheme.textSecondary)),
+                        Text(
+                          'Endura v1.0.0',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
                         const SizedBox(height: 4),
                         Text(
                           'Local-first fitness tracking',
                           style: TextStyle(
                             fontSize: 12,
-                            color:
-                                AppTheme.textSecondary.withValues(alpha: 0.6),
+                            color: AppTheme.textSecondary.withValues(alpha: 0.6),
                           ),
                         ),
                       ],
@@ -458,7 +458,6 @@ class _ProfileStat extends StatelessWidget {
     );
   }
 }
-
 
 class _SettingsAction extends StatelessWidget {
   final IconData icon;

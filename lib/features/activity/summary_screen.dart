@@ -12,9 +12,9 @@ import 'package:endura/shared/widgets/camera_screen.dart';
 import 'package:endura/shared/widgets/photo_action_sheet.dart';
 import 'package:endura/shared/widgets/polyline_preview.dart';
 import 'package:endura/features/profile/user_repository.dart';
-import 'package:endura/features/feed/feed_repository.dart';
+import 'package:endura/features/feed/data/feed_repository.dart';
+import 'package:endura/features/activity/data/activity_repository.dart';
 import 'package:endura/features/challenges/challenge_repository.dart';
-import 'package:endura/features/activity/activity_repository.dart';
 
 /// Strava-inspired post-workout summary screen.
 class SummaryScreen extends StatefulWidget {

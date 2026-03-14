@@ -5,8 +5,8 @@ import 'package:endura/core/theme/app_theme.dart';
 import 'package:endura/core/utils/formatters.dart';
 import 'package:endura/shared/models/cached_activity.dart';
 import 'package:endura/shared/widgets/polyline_preview.dart';
-import 'package:endura/features/activity/activity_repository.dart';
-import 'package:endura/features/feed/feed_repository.dart';
+import 'package:endura/features/activity/data/activity_repository.dart';
+import 'package:endura/features/feed/data/feed_repository.dart';
 
 /// Full activity detail screen — Strava-inspired share card with route + stats.
 class ActivityDetailScreen extends StatefulWidget {
@@ -276,7 +276,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: activity.photos.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
                     itemBuilder: (_, index) {
                       final photo = activity.photos[index];
                       return ClipRRect(
@@ -288,7 +288,7 @@ class _ActivityDetailScreenState extends State<ActivityDetailScreen> {
                           child: Image.file(
                             File(photo.localPath),
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
+                            errorBuilder: (_, _, _) => Container(
                               color: CupertinoColors.systemGrey5,
                               child: const Icon(CupertinoIcons.photo,
                                   color: CupertinoColors.systemGrey3),
