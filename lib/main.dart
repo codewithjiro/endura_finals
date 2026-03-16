@@ -10,6 +10,7 @@ import 'core/providers/theme_provider.dart';
 import 'core/storage/hive_service.dart';
 import 'core/storage/hive_boxes.dart';
 import 'core/theme/app_theme.dart';
+import 'package:endura/core/notifications/workout_notification_service.dart';
 import 'features/home/home_shell.dart';
 import 'features/profile/user_repository.dart';
 import 'signin.dart';
@@ -24,7 +25,13 @@ void main() async {
     statusBarIconBrightness: Brightness.dark,
   ));
 
-  runApp(const ProviderScope(child: AuthGate()));
+  final container = ProviderContainer();
+  await container.read(workoutNotificationServiceProvider).initialize();
+
+  runApp(UncontrolledProviderScope(
+    container: container,
+    child: const AuthGate(),
+  ));
 }
 
 class AuthGate extends StatefulWidget {

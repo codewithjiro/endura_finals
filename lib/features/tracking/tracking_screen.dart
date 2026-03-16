@@ -1,10 +1,7 @@
-import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart' hide ActivityType;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:uuid/uuid.dart';
 import 'package:endura/core/theme/app_theme.dart';
 import 'package:endura/core/maps/endura_map.dart';
 import 'package:endura/core/maps/map_tile_source.dart';
@@ -14,7 +11,7 @@ import 'package:endura/core/utils/location_service.dart';
 import 'package:endura/core/utils/formatters.dart';
 import 'package:endura/shared/models/cached_activity.dart';
 import 'package:endura/features/activity/summary_screen.dart';
-import 'package:endura/features/profile/user_repository.dart';
+import 'package:endura/features/tracking/application/active_workout_provider.dart';
 import 'package:endura/features/tracking/providers/map_source_provider.dart';
 
 /// Track tab — live workout recording with map.
@@ -25,34 +22,24 @@ class TrackingScreen extends ConsumerStatefulWidget {
   ConsumerState<TrackingScreen> createState() => _TrackingScreenState();
 }
 
-enum _WorkoutState { idle, tracking, paused }
-
 class _TrackingScreenState extends ConsumerState<TrackingScreen> {
-  _WorkoutState _state = _WorkoutState.idle;
-  ActivityType _selectedType = ActivityType.walking;
   bool _permissionGranted = false;
   bool _checkingPermission = true;
-  bool _isFollowing = true; // auto-follow user location
-
-  // Workout data
-  final List<LatLng> _routePoints = [];
+  bool _isFollowing = true;
   LatLng? _currentLocation;
-  double _distance = 0; // meters
-  int _elapsedSeconds = 0;
-  double _calories = 0;
-  double _elevationGain = 0;
-  DateTime? _startTime;
-  double? _lastAltitude;
-  DateTime? _lastPositionTime; // used for speed-outlier rejection
-
-  StreamSubscription<Position>? _positionSub;
-  Timer? _timer;
   final MapController _mapController = MapController();
 
   @override
   void initState() {
     super.initState();
     _checkPermission();
+  }
+
+  @override
+  void dispose() {
+    // _workoutSub is not needed when using ref.listen inside build or ConsumerStatefulWidget
+    _mapController.dispose();
+    super.dispose();
   }
 
   void _showMapOptions(MapTileSource selectedMapSource) {
@@ -66,9 +53,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             CupertinoActionSheetAction(
               onPressed: () {
                 Navigator.of(ctx).pop();
-                ref
-                    .read(trackingMapSourceProvider.notifier)
-                    .setSource(source);
+                ref.read(trackingMapSourceProvider.notifier).setSource(source);
               },
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -97,167 +82,35 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 
   Future<void> _checkPermission() async {
     final granted = await LocationService.ensurePermission();
-    if (mounted) {
-      setState(() {
-        _permissionGranted = granted;
-        _checkingPermission = false;
-      });
-      if (granted) _getCurrentLocation();
-    }
+    if (!mounted) return;
+    setState(() {
+      _permissionGranted = granted;
+      _checkingPermission = false;
+    });
+    if (granted) _getCurrentLocation();
   }
 
   Future<void> _getCurrentLocation() async {
     try {
       final pos = await LocationService.getCurrentPosition();
-      if (mounted) {
-        final loc = LatLng(pos.latitude, pos.longitude);
-        setState(() => _currentLocation = loc);
-        // Center the map on the user's position immediately
-        try {
-          _mapController.move(loc, 16);
-        } catch (_) {}
-      }
+      if (!mounted) return;
+      final loc = LatLng(pos.latitude, pos.longitude);
+      setState(() => _currentLocation = loc);
+      try {
+        _mapController.move(loc, 16);
+      } catch (_) {}
     } catch (_) {}
   }
 
-  void _recenter() {
-    if (_currentLocation == null) return;
-    try {
-      _mapController.move(_currentLocation!, 16);
-    } catch (_) {}
+  Future<void> _handleStartWorkout() async {
     setState(() => _isFollowing = true);
+    await ref.read(activeWorkoutProvider.notifier).start();
   }
 
-  void _startWorkout() {
-    _routePoints.clear();
-    _distance = 0;
-    _elapsedSeconds = 0;
-    _calories = 0;
-    _elevationGain = 0;
-    _lastAltitude = null;
-    _lastPositionTime = null;
-    _startTime = DateTime.now();
-    _isFollowing = true;
-
-    _positionSub = LocationService.getPositionStream(distanceFilter: 3)
-        .listen(_onPosition);
-
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_state == _WorkoutState.tracking && mounted) {
-        setState(() => _elapsedSeconds++);
-      }
-    });
-
-    setState(() => _state = _WorkoutState.tracking);
-  }
-
-  void _onPosition(Position pos) {
-    if (_state != _WorkoutState.tracking) return;
-
-    // ── Layer 1: Accuracy gate ─────────────────────────────────────────────
-    // Reject fixes with horizontal accuracy worse than 20 m.
-    // (was 50 m — far too loose; a 49 m accuracy fix is nearly useless)
-    if (pos.accuracy > 20) return;
-
-    final newPoint = LatLng(pos.latitude, pos.longitude);
-    final now = DateTime.now();
-
-    if (_routePoints.isNotEmpty) {
-      final distFromLast = LocationService.distanceBetween(
-        _routePoints.last.latitude, _routePoints.last.longitude,
-        newPoint.latitude, newPoint.longitude,
-      );
-
-      // ── Layer 2: Min-distance guard ───────────────────────────────────────
-      // Ignore points closer than 5 m — eliminates stationary GPS drift.
-      if (distFromLast < 5) {
-        setState(() => _currentLocation = newPoint);
-        if (_isFollowing) {
-          try { _mapController.move(newPoint, _mapController.camera.zoom); } catch (_) {}
-        }
-        return;
-      }
-
-      // ── Layer 3: Speed-outlier rejection ──────────────────────────────────
-      // If the implied speed between the last accepted point and this one
-      // exceeds the physical maximum for the selected activity, it's a GPS
-      // spike — update the map dot but don't add the distance.
-      if (_lastPositionTime != null) {
-        final elapsedSec =
-            now.difference(_lastPositionTime!).inMilliseconds / 1000.0;
-        if (elapsedSec > 0) {
-          final impliedSpeedMs = distFromLast / elapsedSec;
-          if (impliedSpeedMs > _maxSpeedForActivity) {
-            setState(() => _currentLocation = newPoint);
-            if (_isFollowing) {
-              try { _mapController.move(newPoint, _mapController.camera.zoom); } catch (_) {}
-            }
-            return; // spike — skip this point
-          }
-        }
-      }
-    }
-
-    // ── Accepted point — update all workout metrics ────────────────────────
-    _lastPositionTime = now;
-
-    setState(() {
-      if (_routePoints.isNotEmpty) {
-        final last = _routePoints.last;
-        _distance += LocationService.distanceBetween(
-          last.latitude, last.longitude,
-          newPoint.latitude, newPoint.longitude,
-        );
-      }
-
-      // Elevation — only count uphill gain
-      if (_lastAltitude != null && pos.altitude > _lastAltitude!) {
-        _elevationGain += pos.altitude - _lastAltitude!;
-      }
-      _lastAltitude = pos.altitude;
-
-      _calories = (_distance / 1000) * _caloriesPerKm;
-
-      _routePoints.add(newPoint);
-      _currentLocation = newPoint;
-    });
-
-    if (_isFollowing) {
-      try { _mapController.move(newPoint, _mapController.camera.zoom); } catch (_) {}
-    }
-  }
-
-  /// Max credible speed (m/s) for the currently selected activity type.
-  double get _maxSpeedForActivity {
-    switch (_selectedType) {
-      case ActivityType.running: return LocationService.maxSpeedRunning;
-      case ActivityType.cycling: return LocationService.maxSpeedCycling;
-      case ActivityType.walking: return LocationService.maxSpeedWalking;
-      case ActivityType.hiking:  return LocationService.maxSpeedHiking;
-      case ActivityType.riding:  return LocationService.maxSpeedRiding;
-    }
-  }
-
-  double get _caloriesPerKm {
-    switch (_selectedType) {
-      case ActivityType.running:
-        return 62;
-      case ActivityType.cycling:
-        return 30;
-      case ActivityType.walking:
-        return 45;
-      case ActivityType.hiking:
-        return 55;
-      case ActivityType.riding:
-        return 10;
-    }
-  }
-
-  void _confirmStop() {
-    // Pause while user decides
-    if (_state == _WorkoutState.tracking) {
-      _pauseWorkout();
-    }
+  void _confirmStop(ActiveWorkoutState workout) {
+    final controller = ref.read(activeWorkoutProvider.notifier);
+    final wasTracking = workout.status == WorkoutStatus.tracking;
+    if (wasTracking) controller.pause();
 
     showCupertinoDialog(
       context: context,
@@ -269,15 +122,15 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
             child: const Text('Resume'),
             onPressed: () {
               Navigator.of(ctx).pop();
-              _resumeWorkout();
+              controller.resume();
             },
           ),
           CupertinoDialogAction(
             isDestructiveAction: true,
             child: const Text('Finish'),
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(ctx).pop();
-              _stopWorkout();
+              await _stopWorkout();
             },
           ),
         ],
@@ -285,60 +138,53 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     );
   }
 
-  void _pauseWorkout() => setState(() => _state = _WorkoutState.paused);
-
-  void _resumeWorkout() => setState(() => _state = _WorkoutState.tracking);
-
-  void _stopWorkout() {
-    // Set idle FIRST so any in-flight _onPosition call returns early
-    // via the `if (_state != _WorkoutState.tracking) return;` guard.
-    setState(() => _state = _WorkoutState.idle);
-
-    _positionSub?.cancel();
-    _timer?.cancel();
-
-    final userId = UserRepository.getProfile()?.id ?? '';
-
-    final activity = CachedActivity(
-      localId: const Uuid().v4(),
-      userId: userId,
-      type: _selectedType,
-      distance: _distance,
-      duration: _elapsedSeconds,
-      avgPace: Formatters.pace(Duration(seconds: _elapsedSeconds), _distance),
-      avgSpeed: _elapsedSeconds > 0
-          ? (_distance / 1000) / (_elapsedSeconds / 3600)
-          : 0,
-      calories: _calories,
-      elevationGain: _elevationGain,
-      routePoints: _routePoints.map((p) => [p.latitude, p.longitude]).toList(),
-      startTime: _startTime ?? DateTime.now(),
-      endTime: DateTime.now(),
-    );
-
-
-    Navigator.of(context).push(
+  Future<void> _stopWorkout() async {
+    final activity = await ref.read(activeWorkoutProvider.notifier).stop();
+    if (!mounted || activity == null) return;
+    await Navigator.of(context).push(
       CupertinoPageRoute(
         builder: (_) => SummaryScreen(activity: activity),
       ),
     );
   }
 
-
-  @override
-  void dispose() {
-    _positionSub?.cancel();
-    _timer?.cancel();
-    _mapController.dispose();
-    super.dispose();
+  void _recenter(LatLng location) {
+    try {
+      _mapController.move(location, 16);
+    } catch (_) {}
+    setState(() {
+      _currentLocation = location;
+      _isFollowing = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<ActiveWorkoutState>(
+      activeWorkoutProvider,
+      (prev, next) {
+        final nextLoc = next.currentLocation;
+        final prevLoc = prev?.currentLocation;
+
+        // If newly paused or resuming, ensure UI sync
+        if (prev?.status != next.status) {
+           setState(() {}); // refresh if needed, though ref.watch triggers build, listen handles side-effects
+        }
+
+        if (!_isFollowing || nextLoc == null || nextLoc == prevLoc) return;
+        try {
+           _mapController.move(nextLoc, _mapController.camera.zoom);
+        } catch (_) {}
+      },
+    );
+
+    final workout = ref.watch(activeWorkoutProvider);
     final selectedMapSource = ref.watch(trackingMapSourceProvider).maybeWhen(
           data: (source) => source,
           orElse: () => MapTileSources.byId(null),
         );
+    final mapLocation = workout.currentLocation ?? _currentLocation;
+    final routePoints = workout.routePoints;
 
     if (_checkingPermission) {
       return const CupertinoPageScaffold(
@@ -354,14 +200,21 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(CupertinoIcons.location_slash_fill,
-                  size: 48, color: CupertinoColors.systemGrey3),
+              const Icon(
+                CupertinoIcons.location_slash_fill,
+                size: 48,
+                color: CupertinoColors.systemGrey3,
+              ),
               const SizedBox(height: 16),
-              const Text('Location Permission Required',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+              const Text(
+                'Location Permission Required',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
-              const Text('Enable location to track workouts.',
-                  style: TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
+              const Text(
+                'Enable location to track workouts.',
+                style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+              ),
               const SizedBox(height: 20),
               CupertinoButton.filled(
                 onPressed: _checkPermission,
@@ -376,29 +229,31 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     return CupertinoPageScaffold(
       child: Stack(
         children: [
-          // Map — wrapped in Listener to detect manual pan
           Listener(
             onPointerDown: (_) {
               if (_isFollowing) setState(() => _isFollowing = false);
             },
             child: EnduraMap(
-              center: _currentLocation,
+              center: mapLocation,
               zoom: 16,
               mapController: _mapController,
               interactive: true,
               tileSource: selectedMapSource,
-              polylines: _routePoints.length >= 2
-                  ? [PolylineHelper.route(_routePoints, color: AppTheme.primary, width: 5)]
+              polylines: routePoints.length >= 2
+                  ? [
+                      PolylineHelper.route(
+                        routePoints,
+                        color: AppTheme.primary,
+                        width: 5,
+                      ),
+                    ]
                   : [],
               markers: [
-                if (_routePoints.isNotEmpty)
-                  MarkerHelper.start(_routePoints.first),
-                if (_currentLocation != null)
-                  MarkerHelper.currentLocation(_currentLocation!),
+                if (routePoints.isNotEmpty) MarkerHelper.start(routePoints.first),
+                if (mapLocation != null) MarkerHelper.currentLocation(mapLocation),
               ],
             ),
           ),
-
           Positioned(
             top: MediaQuery.of(context).padding.top + 10,
             left: 14,
@@ -409,19 +264,22 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 decoration: BoxDecoration(
                   color: AppTheme.cardColor(context),
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
+                  boxShadow: const [
                     BoxShadow(
-                      color: const Color(0x33000000),
+                      color: Color(0x33000000),
                       blurRadius: 10,
-                      offset: const Offset(0, 3),
+                      offset: Offset(0, 3),
                     ),
                   ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(CupertinoIcons.map_pin_ellipse,
-                        size: 16, color: AppTheme.primary),
+                    const Icon(
+                      CupertinoIcons.map_pin_ellipse,
+                      size: 16,
+                      color: AppTheme.primary,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       selectedMapSource.label,
@@ -436,32 +294,33 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
               ),
             ),
           ),
-
-          // Recenter button — top-right, solid and always visible
-          if (_currentLocation != null)
+          if (mapLocation != null)
             Positioned(
               top: MediaQuery.of(context).padding.top + 10,
               right: 14,
               child: GestureDetector(
-                onTap: _recenter,
+                onTap: () => _recenter(mapLocation),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: AppTheme.cardColor(context),
                     borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
+                    boxShadow: const [
                       BoxShadow(
-                        color: const Color(0x33000000),
+                        color: Color(0x33000000),
                         blurRadius: 10,
-                        offset: const Offset(0, 3),
+                        offset: Offset(0, 3),
                       ),
                     ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(CupertinoIcons.location_fill,
-                          size: 16, color: AppTheme.primary),
+                      const Icon(
+                        CupertinoIcons.location_fill,
+                        size: 16,
+                        color: AppTheme.primary,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         'Recenter',
@@ -476,8 +335,6 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 ),
               ),
             ),
-
-          // Bottom controls
           Positioned(
             bottom: 0,
             left: 0,
@@ -488,19 +345,18 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
                 decoration: BoxDecoration(
                   color: AppTheme.cardColor(context).withValues(alpha: 0.97),
-                  borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(24)),
-                  boxShadow: [
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  boxShadow: const [
                     BoxShadow(
-                      color: const Color(0x1A000000),
+                      color: Color(0x1A000000),
                       blurRadius: 12,
-                      offset: const Offset(0, -4),
+                      offset: Offset(0, -4),
                     ),
                   ],
                 ),
-                child: _state == _WorkoutState.idle
-                    ? _buildIdleControls()
-                    : _buildActiveControls(),
+                child: workout.status == WorkoutStatus.idle
+                    ? _buildIdleControls(workout)
+                    : _buildActiveControls(workout),
               ),
             ),
           ),
@@ -509,32 +365,34 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     );
   }
 
-  Widget _buildIdleControls() {
+  Widget _buildIdleControls(ActiveWorkoutState workout) {
+    final controller = ref.read(activeWorkoutProvider.notifier);
+    final selectedType = workout.selectedType;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Activity type picker with icons
         SizedBox(
           height: 56,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: ActivityType.values.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (context, i) {
               final type = ActivityType.values[i];
-              final selected = _selectedType == type;
+              final isSelected = selectedType == type;
               return GestureDetector(
-                onTap: () => setState(() => _selectedType = type),
+                onTap: () => controller.selectType(type),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    color: selected
+                    color: isSelected
                         ? AppTheme.primary
                         : AppTheme.cardColor(context).withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: selected
+                      color: isSelected
                           ? AppTheme.primary
                           : CupertinoColors.systemGrey4.withValues(alpha: 0.4),
                     ),
@@ -549,7 +407,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: selected
+                          color: isSelected
                               ? CupertinoColors.white
                               : AppTheme.textColor(context),
                         ),
@@ -567,17 +425,17 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           child: CupertinoButton(
             color: AppTheme.primary,
             borderRadius: BorderRadius.circular(AppTheme.radius),
-            onPressed: _startWorkout,
+            onPressed: _handleStartWorkout,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  _selectedType.icon,
+                  selectedType.icon,
                   style: const TextStyle(fontSize: 18),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Start ${_selectedType.label}',
+                  'Start ${selectedType.label}',
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 17,
@@ -592,35 +450,36 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
     );
   }
 
-  Widget _buildActiveControls() {
-    final dur = Duration(seconds: _elapsedSeconds);
+  Widget _buildActiveControls(ActiveWorkoutState workout) {
+    final controller = ref.read(activeWorkoutProvider.notifier);
+    final status = workout.status;
+    final selectedType = workout.selectedType;
+    final distance = workout.distance;
+    final elapsedSeconds = workout.elapsedSeconds;
+    final duration = Duration(seconds: elapsedSeconds);
 
-    // Pace / Speed — value and unit split
+    final bool isSpeedBased =
+        selectedType == ActivityType.cycling || selectedType == ActivityType.riding;
     final String paceVal;
     final String paceUnit;
-    if (_selectedType == ActivityType.cycling || _selectedType == ActivityType.riding) {
-      final kmh = _elapsedSeconds > 0
-          ? ((_distance / 1000) / (_elapsedSeconds / 3600))
+    if (isSpeedBased) {
+      final kmh = elapsedSeconds > 0
+          ? (distance / 1000) / (elapsedSeconds / 3600)
           : 0.0;
       paceVal = kmh.toStringAsFixed(1);
       paceUnit = 'km/h';
     } else {
-      paceVal = Formatters.paceValue(dur, _distance);
+      paceVal = Formatters.paceValue(duration, distance);
       paceUnit = '/km';
     }
-    final paceLabel = (_selectedType == ActivityType.cycling || _selectedType == ActivityType.riding) ? 'Speed' : 'Pace';
+    final paceLabel = isSpeedBased ? 'Speed' : 'Pace';
 
-    // Distance — value and unit split
-    final distKm = _distance / 1000;
-    final distVal = distKm.toStringAsFixed(2);
-
-    // Time — Strava style (1h 0m or mm:ss)
-    final timeVal = Formatters.durationTrack(dur);
+    final distVal = (distance / 1000).toStringAsFixed(2);
+    final timeVal = Formatters.durationTrack(duration);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // ── Big stats row ───────────────────────────────────────
         Row(
           children: [
             Expanded(
@@ -657,13 +516,11 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
           ],
         ),
         const SizedBox(height: 20),
-        // ── Controls row ────────────────────────────────────────
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            // Stop button
             GestureDetector(
-              onTap: _confirmStop,
+              onTap: () => _confirmStop(workout),
               child: Container(
                 width: 60,
                 height: 60,
@@ -678,15 +535,16 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                     ),
                   ],
                 ),
-                child: const Icon(CupertinoIcons.stop_fill,
-                    color: CupertinoColors.white, size: 26),
+                child: const Icon(
+                  CupertinoIcons.stop_fill,
+                  color: CupertinoColors.white,
+                  size: 26,
+                ),
               ),
             ),
-            // Pause/Resume button
             GestureDetector(
-              onTap: _state == _WorkoutState.paused
-                  ? _resumeWorkout
-                  : _pauseWorkout,
+              onTap:
+                  status == WorkoutStatus.paused ? controller.resume : controller.pause,
               child: Container(
                 width: 76,
                 height: 76,
@@ -702,7 +560,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                   ],
                 ),
                 child: Icon(
-                  _state == _WorkoutState.paused
+                  status == WorkoutStatus.paused
                       ? CupertinoIcons.play_fill
                       : CupertinoIcons.pause_fill,
                   color: CupertinoColors.white,
@@ -710,7 +568,6 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
                 ),
               ),
             ),
-            // Spacer for symmetry
             const SizedBox(width: 60, height: 60),
           ],
         ),
@@ -722,7 +579,7 @@ class _TrackingScreenState extends ConsumerState<TrackingScreen> {
 class _BigStat extends StatelessWidget {
   final String label;
   final String value;
-  final String? unit; // rendered smaller, inline after value
+  final String? unit;
 
   const _BigStat({required this.label, required this.value, this.unit});
 
